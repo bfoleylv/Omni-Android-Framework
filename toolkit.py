@@ -1,106 +1,109 @@
-import tkinter as tk
-from tkinter import messagebox, filedialog, ttk
-import subprocess
 import os
-import threading
+import subprocess
+import sys
+import logging
+import tkinter as tk
+from tkinter import ttk, messagebox
+
+logging.basicConfig(
+    filename='/home/bfoleylv/androidtoolkit_build/toolkit_errors.log',
+    level=logging.ERROR,
+    format='%(asctime)s:%(levelname)s:%(message)s'
+)
 
 class OmniFramework:
     def __init__(self, root):
         self.root = root
-        self.root.title("Brandon's Omni-Framework v6.0 (Dynamic Tabs)")
-        self.root.geometry("1200x900")
+        self.root.title("Omni-Android-Framework v1.5")
+        self.root.geometry("1100x750")
         self.root.configure(bg="#121212")
 
-        # --- PATHS ---
-        self.base_dir = os.path.expanduser("~/AndroidToolkit_Build")
-        self.plugin_dir = f"{self.base_dir}/plugins"
-        self.sensor_dir = f"{self.base_dir}/sensors"
-        os.makedirs(self.plugin_dir, exist_ok=True)
-        os.makedirs(self.sensor_dir, exist_ok=True)
+        self.base_dir = "/home/bfoleylv/androidtoolkit_build"
+        self.driver_dir = os.path.join(self.base_dir, "drivers")
+        self.plugin_dir = os.path.join(self.base_dir, "plugins")
+        self.sensor_dir = os.path.join(self.base_dir, "sensors")
 
-        # --- UI LAYOUT ---
-        self.left_panel = tk.Frame(root, bg="#1a1a1a", width=320)
-        self.left_panel.pack(side="left", fill="y", padx=5, pady=5)
+        self.setup_ui()
+        self.refresh_diagnostics()
+        self.build_plugin_tabs()
+
+    def setup_ui(self):
+        self.style = ttk.Style()
+        self.style.theme_use('clam')
+        self.style.configure("TNotebook", background="#1e1e1e", borderwidth=0)
+        self.style.configure("TNotebook.Tab", background="#333333", foreground="#00ff00")
+        self.style.map("TNotebook.Tab", background=[("selected", "#00ff00")], foreground=[("selected", "#000000")])
+
+        self.paned = ttk.PanedWindow(self.root, orient="horizontal")
+        self.paned.pack(expand=True, fill="both")
+
+        self.left_frame = tk.Frame(self.paned, bg="#000000", width=350)
+        self.paned.add(self.left_frame)
         
-        tk.Label(self.left_panel, text="DEVICE DIAGNOSTICS", fg="#00ffcc", bg="#1a1a1a", font=("Arial", 12, "bold")).pack(pady=10)
-        self.info_box = tk.Text(self.left_panel, bg="#000", fg="#0f0", font=("Courier", 10), height=35, width=38)
-        self.info_box.pack(pady=5, padx=10)
-        
-        tk.Button(self.left_panel, text="FORCE RE-SCAN", command=self.update_info, bg="#00d1ff", fg="black", font=("Arial", 10, "bold")).pack(pady=10, fill="x", padx=20)
-        tk.Button(self.left_panel, text="REFRESH TABS", command=self.build_tabs, bg="#9b59b6", fg="white").pack(pady=5, fill="x", padx=20)
+        tk.Label(self.left_frame, text="DEVICE STATUS", bg="#000000", fg="#00ff00", font=("Courier", 12, "bold")).pack(pady=5)
+        self.console = tk.Text(self.left_frame, bg="#000000", fg="#00ff00", font=("Courier", 10), borderwidth=0)
+        self.console.pack(expand=True, fill="both", padx=10)
 
-        # --- THE DYNAMIC NOTEBOOK ---
-        self.tabs = ttk.Notebook(root)
-        self.tabs.pack(side="right", expand=True, fill="both", padx=10, pady=10)
+        # Only the Hard Reset for Drivers stays here for stability
+        btn_frame = tk.Frame(self.left_frame, bg="#000000")
+        btn_frame.pack(fill="x", side="bottom", pady=10)
+        tk.Button(btn_frame, text="FIX DRIVERS", bg="#cc0000", fg="white", font=("Courier", 10, "bold"), command=self.fix_drivers).pack(fill="x", padx=10)
 
-        self.build_tabs()
-        self.update_loop()
+        self.right_frame = tk.Frame(self.paned, bg="#1e1e1e")
+        self.paned.add(self.right_frame)
+        self.notebook = ttk.Notebook(self.right_frame)
+        self.notebook.pack(expand=True, fill="both", padx=5, pady=5)
 
-    def build_tabs(self):
-        # Clear existing tabs
-        for tab in self.tabs.tabs():
-            self.tabs.forget(tab)
-
-        # Scan the plugins directory for sub-folders
-        if not os.path.exists(self.plugin_dir): return
-
-        folders = [d for d in os.listdir(self.plugin_dir) if os.path.isdir(os.path.join(self.plugin_dir, d))]
-        
-        # Sort them so Core/Safety usually comes first if they exist
-        folders.sort()
-
-        for folder_name in folders:
-            # Create the Tab Frame
-            tab_frame = tk.Frame(self.tabs, bg="#1c1c1c")
-            nice_name = folder_name.replace("_", " ").title()
-            self.tabs.add(tab_frame, text=f"  {nice_name}  ")
-
-            # Create a Section for the Plugins in this folder
-            full_path = os.path.join(self.plugin_dir, folder_name)
-            self.populate_tab(tab_frame, nice_name, full_path)
-
-    def populate_tab(self, parent, title, folder_path):
-        frame = tk.LabelFrame(parent, text=title.upper(), fg="#00ffcc", bg="#1c1c1c", font=("Arial", 10, "bold"), padx=10, pady=10)
-        frame.pack(fill="x", pady=10, padx=10)
-        
-        files = [f for f in os.listdir(folder_path) if f.endswith(".py")]
-        if not files:
-            tk.Label(frame, text="No scripts found in this category.", fg="#555", bg="#1c1c1c").pack()
-            return
-
-        for f in files:
-            btn_name = f.replace(".py", "").replace("_", " ").title()
-            script_path = os.path.join(folder_path, f)
-            btn = tk.Button(frame, text=btn_name, command=lambda p=script_path: self.run_script(p), 
-                           bg="#333", fg="white", width=22, pady=8, relief="flat")
-            btn.pack(side="left", padx=5)
-
-    def run_script(self, path):
-        threading.Thread(target=lambda: subprocess.run(f"python3 '{path}'", shell=True), daemon=True).start()
-
-    def update_info(self):
-        self.info_box.config(state='normal')
-        self.info_box.delete("1.0", tk.END)
+    def fix_drivers(self):
         try:
-            model = subprocess.run(['adb', 'shell', 'getprop', 'ro.product.model'], capture_output=True, text=True).stdout.strip()
-            display_text = f"📱 MODEL: {model}\n---------------------------\n"
+            cmd = "echo 'SUBSYSTEM==\"usb\", ATTR{idVendor}==\"*\", MODE=\"0666\", GROUP=\"plugdev\"' | sudo tee /etc/udev/rules.d/51-android.rules && sudo udevadm control --reload-rules && sudo udevadm trigger"
+            subprocess.run(cmd, shell=True)
+            subprocess.run(["sudo", "modprobe", "usbserial", "vendor=0x05c6", "product=0x9008"])
+            self.console.insert(tk.END, "\n[+] DRIVERS RELOADED")
+        except Exception as e:
+            logging.error(f"Driver fix failed: {e}")
 
-            # Dynamic Sensors
-            if os.path.exists(self.sensor_dir):
-                for f in os.listdir(self.sensor_dir):
-                    if f.endswith(".py"):
-                        res = subprocess.run(['python3', os.path.join(self.sensor_dir, f)], capture_output=True, text=True)
-                        display_text += f"{res.stdout.strip()}\n"
-
-            display_text += "---------------------------\nSTATUS: ONLINE"
-            self.info_box.insert(tk.END, display_text)
+    def refresh_diagnostics(self):
+        self.console.delete("1.0", tk.END)
+        self.console.insert(tk.END, "--- SCANNING HARDWARE ---\n")
+        try:
+            model = subprocess.check_output(["adb", "shell", "getprop", "ro.product.model"], text=True, timeout=2).strip() or "OnePlus 8"
+            ver = subprocess.check_output(["adb", "shell", "getprop", "ro.build.version.release"], text=True, timeout=2).strip()
+            batt = subprocess.check_output("adb shell dumpsys battery | grep level", shell=True, text=True, timeout=2).split(":")[1].strip()
+            self.console.insert(tk.END, f"\nDEVICE: {model}\nOS: Android {ver}\nBATTERY: {batt}%")
         except:
-            self.info_box.insert(tk.END, "DEVICE DISCONNECTED")
-        self.info_box.config(state='disabled')
+            try:
+                fb = subprocess.check_output(["fastboot", "devices"], text=True, timeout=2).strip()
+                if fb: self.console.insert(tk.END, f"\n[!] MODE: FASTBOOT ACTIVE\nID: {fb.split()[0]}")
+                else: self.console.insert(tk.END, "\n[?] STATUS: DISCONNECTED")
+            except:
+                self.console.insert(tk.END, "\n[?] STATUS: DISCONNECTED")
+        self.root.after(10000, self.refresh_diagnostics)
 
-    def update_loop(self):
-        self.update_info()
-        self.root.after(5000, self.update_loop)
+    def build_plugin_tabs(self):
+        if not os.path.exists(self.plugin_dir): return
+        # Clear existing tabs
+        for tab in self.notebook.tabs():
+            self.notebook.forget(tab)
+        for folder in sorted(os.listdir(self.plugin_dir)):
+            full_path = os.path.join(self.plugin_dir, folder)
+            if os.path.isdir(full_path):
+                tab = tk.Frame(self.notebook, bg="#1e1e1e")
+                self.notebook.add(tab, text=folder.lower())
+                for file in sorted(os.listdir(full_path)):
+                    if file.endswith(".py"):
+                        btn = ttk.Button(tab, text=file[:-3].replace("_", " ").upper(), 
+                                       command=lambda f=folder, n=file: self.run_tool(f, n))
+                        btn.pack(pady=5, padx=20, fill="x")
+
+    def run_tool(self, category, filename):
+        target = os.path.join(self.plugin_dir, category, filename)
+        env = os.environ.copy()
+        env["OMNI_DRIVER_PAYLOAD"] = self.driver_dir
+        try:
+            subprocess.Popen([sys.executable, target], env=env)
+        except Exception as e:
+            logging.error(f"Plugin failed: {filename} - {e}")
 
 if __name__ == "__main__":
     root = tk.Tk()

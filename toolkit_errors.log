@@ -1,0 +1,7 @@
+2026-04-16 10:16:03,437:ERROR:ADB Fail: adb reboot sideload - Command '['adb', 'reboot', 'sideload']' returned non-zero exit status 1.
+2026-04-16 10:16:06,740:ERROR:ADB Fail: adb reboot sideload - Command '['adb', 'reboot', 'sideload']' returned non-zero exit status 1.
+2026-04-16 10:16:14,080:ERROR:ADB Fail: adb reboot sideload - Command '['adb', 'reboot', 'sideload']' returned non-zero exit status 1.
+2026-04-16 10:16:15,824:ERROR:ADB Fail: adb reboot sideload - Command '['adb', 'reboot', 'sideload']' returned non-zero exit status 1.
+2026-04-16 10:18:37,385:ERROR:ADB Fail: adb reboot sideload - Command '['adb', 'reboot', 'sideload']' returned non-zero exit status 1.
+2026-04-16 10:25:37,063:ERROR:Command failed: adb reboot sideload - Command '['adb', 'reboot', 'sideload']' returned non-zero exit status 1.
+2026-04-16 10:25:40,317:ERROR:Command failed: adb reboot sideload - Command '['adb', 'reboot', 'sideload']' returned non-zero exit status 1.
