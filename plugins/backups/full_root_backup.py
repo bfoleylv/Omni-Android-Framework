@@ -27,30 +27,26 @@ def run_backup():
     progress_text.pack(expand=True, fill="both", padx=10, pady=10)
 
     def start_stream():
-        # Force real-time output and combined error logging
-        cmd = f"adb shell su -c 'tar -cvf /sdcard/temp_backup.tar /data' && adb pull /sdcard/temp_backup.tar \"{target_file}\" && adb shell rm /sdcard/temp_backup.tar"
+        # Step 1: Verify Root Access first
+        check_root = subprocess.run("adb shell su -c 'id'", shell=True, capture_output=True, text=True)
         
-        progress_text.insert(tk.END, f"[*] EXECUTING: {cmd}\n\n")
+        if "root" not in check_root.stdout:
+            progress_text.insert(tk.END, "[!] ROOT ACCESS DENIED\n")
+            progress_text.insert(tk.END, "Check your OnePlus 8 screen and GRANT Magisk permissions.\n")
+            return
+
+        # Step 2: Run the actual backup
+        cmd = f"adb shell su -c 'tar -cvf /sdcard/temp_backup.tar /data' && adb pull /sdcard/temp_backup.tar \"{target_file}\" && adb shell rm /sdcard/temp_backup.tar"
         
         process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         
-        has_output = False
         for line in process.stdout:
-            has_output = True
             progress_text.insert(tk.END, line)
             progress_text.see(tk.END)
             win.update_idletasks()
-        
-        process.wait()
-        
-        if not has_output:
-            progress_text.insert(tk.END, "\n[!] ERROR: No data received. Check ADB and Root permissions.")
-        else:
-            messagebox.showinfo("SUCCESS", f"Backup Finished!\nLocation: {target_file}")
-            win.destroy()
+            
+        messagebox.showinfo("SUCCESS", "Backup Complete!")
+        win.destroy()
 
     win.after(500, start_stream)
     win.mainloop()
-
-if __name__ == "__main__":
-    run_backup()
