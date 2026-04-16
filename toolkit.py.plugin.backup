@@ -1,106 +1,107 @@
-import tkinter as tk
-from tkinter import messagebox, filedialog, ttk
-import subprocess
 import os
-import threading
+import subprocess
+import sys
+import tkinter as tk
+from tkinter import ttk, messagebox
 
 class OmniFramework:
     def __init__(self, root):
         self.root = root
-        self.root.title("Brandon's Omni-Framework v6.0 (Dynamic Tabs)")
-        self.root.geometry("1200x900")
+        self.root.title("Omni-Android-Framework v1.0")
+        self.root.geometry("1000x650")
         self.root.configure(bg="#121212")
 
-        # --- PATHS ---
-        self.base_dir = os.path.expanduser("~/AndroidToolkit_Build")
-        self.plugin_dir = f"{self.base_dir}/plugins"
-        self.sensor_dir = f"{self.base_dir}/sensors"
-        os.makedirs(self.plugin_dir, exist_ok=True)
-        os.makedirs(self.sensor_dir, exist_ok=True)
+        # 1. PATH CONFIGURATION (The "Lower-Case" Standard)
+        self.base_dir = os.path.dirname(os.path.abspath(__file__))
+        self.driver_dir = os.path.join(self.base_dir, "drivers")
+        self.plugin_dir = os.path.join(self.base_dir, "plugins")
+        self.sensor_dir = os.path.join(self.base_dir, "sensors")
 
-        # --- UI LAYOUT ---
-        self.left_panel = tk.Frame(root, bg="#1a1a1a", width=320)
-        self.left_panel.pack(side="left", fill="y", padx=5, pady=5)
+        # Ensure all directory structures are present
+        for directory in [self.driver_dir, self.plugin_dir, self.sensor_dir]:
+            if not os.path.exists(directory):
+                os.makedirs(directory)
+
+        # 2. UI STYLING (Dark Mode / Matrix Aesthetics)
+        self.style = ttk.Style()
+        self.style.theme_use('clam')
+        self.style.configure("TNotebook", background="#1e1e1e", borderwidth=0)
+        self.style.configure("TNotebook.Tab", background="#333333", foreground="#ffffff", padding=[10, 5])
+        self.style.map("TNotebook.Tab", background=[("selected", "#00ff00")], foreground=[("selected", "#000000")])
+
+        # 3. MAIN LAYOUT
+        self.paned = ttk.PanedWindow(self.root, orient="horizontal")
+        self.paned.pack(expand=True, fill="both")
+
+        # LEFT PANEL: The Spec Sheet (Back of Phone Info)
+        self.left_frame = tk.Frame(self.paned, bg="#000000", width=300)
+        self.paned.add(self.left_frame)
+
+        tk.Label(self.left_frame, text="SYSTEM DIAGNOSTICS", bg="#000000", fg="#00ff00", font=("Fixedsys", 12)).pack(pady=10)
         
-        tk.Label(self.left_panel, text="DEVICE DIAGNOSTICS", fg="#00ffcc", bg="#1a1a1a", font=("Arial", 12, "bold")).pack(pady=10)
-        self.info_box = tk.Text(self.left_panel, bg="#000", fg="#0f0", font=("Courier", 10), height=35, width=38)
-        self.info_box.pack(pady=5, padx=10)
+        self.console = tk.Text(self.left_frame, bg="#000000", fg="#00ff00", font=("Courier", 10), insertbackground="white", bd=0)
+        self.console.pack(expand=True, fill="both", padx=10, pady=5)
+
+        # RIGHT PANEL: The Plugin Tabs
+        self.right_frame = tk.Frame(self.paned, bg="#1e1e1e")
+        self.paned.add(self.right_frame)
+
+        self.notebook = ttk.Notebook(self.right_frame)
+        self.notebook.pack(expand=True, fill="both", padx=5, pady=5)
+
+        # 4. INITIALIZE CONTENT
+        self.refresh_diagnostics()
+        self.build_plugin_tabs()
+
+    def refresh_diagnostics(self):
+        """Scans the /sensors/ folder and displays output in the green console."""
+        self.console.delete("1.0", tk.END)
+        self.console.insert(tk.END, "--- SCANNING HARDWARE ---\n")
         
-        tk.Button(self.left_panel, text="FORCE RE-SCAN", command=self.update_info, bg="#00d1ff", fg="black", font=("Arial", 10, "bold")).pack(pady=10, fill="x", padx=20)
-        tk.Button(self.left_panel, text="REFRESH TABS", command=self.build_tabs, bg="#9b59b6", fg="white").pack(pady=5, fill="x", padx=20)
-
-        # --- THE DYNAMIC NOTEBOOK ---
-        self.tabs = ttk.Notebook(root)
-        self.tabs.pack(side="right", expand=True, fill="both", padx=10, pady=10)
-
-        self.build_tabs()
-        self.update_loop()
-
-    def build_tabs(self):
-        # Clear existing tabs
-        for tab in self.tabs.tabs():
-            self.tabs.forget(tab)
-
-        # Scan the plugins directory for sub-folders
-        if not os.path.exists(self.plugin_dir): return
-
-        folders = [d for d in os.listdir(self.plugin_dir) if os.path.isdir(os.path.join(self.plugin_dir, d))]
+        if os.path.exists(self.sensor_dir):
+            scripts = [f for f in os.listdir(self.sensor_dir) if f.endswith(".py")]
+            for script in scripts:
+                path = os.path.join(self.sensor_dir, script)
+                try:
+                    proc = subprocess.run([sys.executable, path], capture_output=True, text=True, timeout=2)
+                    self.console.insert(tk.END, f"\n[+] {script[:-3].upper()}:\n{proc.stdout}")
+                except Exception as e:
+                    self.console.insert(tk.END, f"\n[!] {script[:-3].upper()}: ERROR")
         
-        # Sort them so Core/Safety usually comes first if they exist
-        folders.sort()
+        # Automatic refresh every 10 seconds to keep diagnostics current
+        self.root.after(10000, self.refresh_diagnostics)
 
-        for folder_name in folders:
-            # Create the Tab Frame
-            tab_frame = tk.Frame(self.tabs, bg="#1c1c1c")
-            nice_name = folder_name.replace("_", " ").title()
-            self.tabs.add(tab_frame, text=f"  {nice_name}  ")
-
-            # Create a Section for the Plugins in this folder
-            full_path = os.path.join(self.plugin_dir, folder_name)
-            self.populate_tab(tab_frame, nice_name, full_path)
-
-    def populate_tab(self, parent, title, folder_path):
-        frame = tk.LabelFrame(parent, text=title.upper(), fg="#00ffcc", bg="#1c1c1c", font=("Arial", 10, "bold"), padx=10, pady=10)
-        frame.pack(fill="x", pady=10, padx=10)
-        
-        files = [f for f in os.listdir(folder_path) if f.endswith(".py")]
-        if not files:
-            tk.Label(frame, text="No scripts found in this category.", fg="#555", bg="#1c1c1c").pack()
+    def build_plugin_tabs(self):
+        """Dynamically creates tabs based on folders in /plugins/."""
+        if not os.path.exists(self.plugin_dir):
             return
 
-        for f in files:
-            btn_name = f.replace(".py", "").replace("_", " ").title()
-            script_path = os.path.join(folder_path, f)
-            btn = tk.Button(frame, text=btn_name, command=lambda p=script_path: self.run_script(p), 
-                           bg="#333", fg="white", width=22, pady=8, relief="flat")
-            btn.pack(side="left", padx=5)
+        for folder in sorted(os.listdir(self.plugin_dir)):
+            full_path = os.path.join(self.plugin_dir, folder)
+            if os.path.isdir(full_path):
+                tab = ttk.Frame(self.notebook)
+                self.notebook.add(tab, text=folder.lower())
+                
+                # Add buttons for every script in this category
+                for file in sorted(os.listdir(full_path)):
+                    if file.endswith(".py"):
+                        name = file[:-3].replace("_", " ").upper()
+                        btn = ttk.Button(tab, text=name, command=lambda f=folder, s=file: self.run_tool(f, s))
+                        btn.pack(pady=8, padx=20, fill="x")
 
-    def run_script(self, path):
-        threading.Thread(target=lambda: subprocess.run(f"python3 '{path}'", shell=True), daemon=True).start()
-
-    def update_info(self):
-        self.info_box.config(state='normal')
-        self.info_box.delete("1.0", tk.END)
+    def run_tool(self, category, filename):
+        """Executes the plugin and provides the driver folder path."""
+        target = os.path.join(self.plugin_dir, category, filename)
+        
+        # Passing the driver directory as an environment variable
+        env_vars = os.environ.copy()
+        env_vars["OMNI_DRIVER_PAYLOAD"] = self.driver_dir
+        
         try:
-            model = subprocess.run(['adb', 'shell', 'getprop', 'ro.product.model'], capture_output=True, text=True).stdout.strip()
-            display_text = f"📱 MODEL: {model}\n---------------------------\n"
-
-            # Dynamic Sensors
-            if os.path.exists(self.sensor_dir):
-                for f in os.listdir(self.sensor_dir):
-                    if f.endswith(".py"):
-                        res = subprocess.run(['python3', os.path.join(self.sensor_dir, f)], capture_output=True, text=True)
-                        display_text += f"{res.stdout.strip()}\n"
-
-            display_text += "---------------------------\nSTATUS: ONLINE"
-            self.info_box.insert(tk.END, display_text)
-        except:
-            self.info_box.insert(tk.END, "DEVICE DISCONNECTED")
-        self.info_box.config(state='disabled')
-
-    def update_loop(self):
-        self.update_info()
-        self.root.after(5000, self.update_loop)
+            subprocess.Popen([sys.executable, target], env=env_vars)
+            print(f"[*] Started: {filename} from {category}")
+        except Exception as e:
+            messagebox.showerror("Execution Error", f"Failed to launch {filename}\n{str(e)}")
 
 if __name__ == "__main__":
     root = tk.Tk()
